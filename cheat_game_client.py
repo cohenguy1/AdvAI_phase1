@@ -2,7 +2,7 @@ import random
 from math import exp
 from collections import defaultdict
 
-from cheat_game_server import Game
+from cheat_game_server import Game, ActionEnum
 from cheat_game_server import Player, Human
 from cheat_game_server import Claim, Take_Card, Cheat, Call_Cheat
 from cheat_game_server import Rank, Suit, Card
@@ -42,6 +42,7 @@ class Agent(Player):
         # if opponent placed his last cards on the table - call_cheat or lose
         action = self.agent_logic(deck_count, table_count, opponent_count,
                                   last_action, last_claim, honest_moves, cards_revealed)
+        assert (action in honest_moves or isinstance(action, Cheat))
         if isinstance(action, Call_Cheat):
             self.call_cheat()
         elif isinstance(action, Claim):
@@ -117,7 +118,7 @@ class DemoAgent(Agent):
             cheat_count = 1
             # decaying function of number of cards on the table - cheat less when risk is large
             r = 0.5 * exp(-0.1 * table_count)
-            while random.random() < r and len(self.cards) >= (cheat_count + 1):
+            while cheat_count < 4 and random.random() < r and len(self.cards) >= (cheat_count + 1):
                 cheat_count += 1
             # select cards furthest from current claim rank
             dist = defaultdict(int)
@@ -127,5 +128,4 @@ class DemoAgent(Agent):
             return Cheat(claim_cards, cheat_rank, cheat_count)
 
 
-cheat = Game(DemoAgent("Demo 1"), Human("me"))
-cheat.play()
+

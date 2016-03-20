@@ -298,7 +298,7 @@ class Player(object):
         moves = []
         if not self.deck.empty():
             moves.append(Take_Card())
-        if self.table.claims and self.game.get_state()['LAST_ACTION'] == "MAKE_CLAIM":
+        if self.table.claims and self.game.get_state()['LAST_ACTION'] == ActionEnum.MAKE_CLAIM:
             moves.append(Call_Cheat())
         if above_cards:
             for claim_size in xrange(1, len(above_cards) + 1):
@@ -464,7 +464,7 @@ class Human(Player):
         print "Player {0:1d} ({1:s}) turn".format(self.id, self.name)
         print "================" + "=" * len(self.name)
         last_claim = self.table.last_claim()
-        print "Last Claim: {0} cards of rank {1}".format(last_claim.count, last_claim.rank)
+        print "Last Claim: {0} cards of rank {1}".format(last_claim.count, str(last_claim.rank))
         print "Number of opponenr cards: {0:2d}".format(number_of_opponent_cards)
         print "Your Cards: ", ','.join([str(card) for card in self.cards])
         print "possible moves:"

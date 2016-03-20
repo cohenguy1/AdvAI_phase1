@@ -24,6 +24,7 @@ cheat_game_client.py - a simplistic demo agent, should be used as a scaffold for
 Development environment
 =======================
 Use Python 2.7.x
+install enum package: "pip install enum34"
 recommended IDE - PyCharm by JetBrains
 The IDE enables convenient editing/refactorig/debugging/running
 Ctrl-Q can be used to access function description of server classes and functions
