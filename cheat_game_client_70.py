@@ -12,50 +12,75 @@ from cheat_game_client import Agent
 class Agent_70(Agent):
     def __init__(self, name):
         super(Agent_70, self).__init__(name)
+        # my recent claims
         self._my_claims = []
+        # cards that the opponents
         self._opponent_claims = []
+        # cards who was at my hand and the opponent took
         self._opponent_cards = []
+        # cards that I have discard
         self._table_known_cards = []
+        # probability to decide to cheat
         self.cheat_prob = {"NO_MOVES": 0.6, "AVAIL_CLAIMS": 0.1}
+        # probability to decide to call cheat
         self.call_cheat_prob = {1: 0.06, 2: 0.011, 3: 0.28, 4: 0.47}
+        # did I cheat in my last move
+        self.is_last_cheat = False
+        # cards that the opponent know I had
+        self._my_known_cards = []
 
     """
     This function implements action logic / move selection for the agent\n
-    :param deck_count:
-    :param table_count:
-    :param opponent_count:
-    :param last_action: ActionEnum.TAKE_CARD or .MAKE_CLAIM or .CALL_CHEAT
-    :param last_claim:
+    :param deck_count: amount of cards in the deck
+    :param table_count: amount of cards on the table
+    :param opponent_count: amount of cards in the opponent hand
+    :param last_action: the opponent last action from ActionEnum.TAKE_CARD or .MAKE_CLAIM or .CALL_CHEAT
+    :param last_claim: the last claim of card discarding
     :param honest_moves: a list of available actions, other than making a false ("cheat") claim
     :param cards_revealed: if last action was "call cheat" cards on table were revealed
     :return: Action object Call_Cheat or Claim or Take_Card or Cheat
     """
-
     def agent_logic(self, deck_count, table_count, opponent_count,
                     last_action, last_claim, honest_moves, cards_revealed):
+
+        # update known information
         if last_action == ActionEnum.CALL_CHEAT:
             self._table_known_cards = []
             self._opponent_claims = []
-            for card in cards_revealed:
-                self._opponent_cards.append(card)
+            if not self.is_last_cheat:
+                for card in cards_revealed:
+                    self._opponent_cards.append(card)
+            else:
+                # if I had cheat and the opponent called cheat he now know the cards I get
+                for card in cards_revealed:
+                    self._my_known_cards.append(card)
 
         if last_action == ActionEnum.MAKE_CLAIM:
             self._opponent_claims.append(last_claim)
 
-        if self.need_to_call_cheat(opponent_count, last_action, last_claim):
-            for move in honest_moves:
-                if isinstance(move, Call_Cheat):
-                    return move
+        # reset variable
+        self.is_last_cheat = False
+
+        if last_claim:
+            if self.need_to_call_cheat(opponent_count, last_action, last_claim):
+                for move in honest_moves:
+                    if isinstance(move, Call_Cheat):
+                        return move
 
         move = self.get_best_move(last_claim, honest_moves)
 
         if isinstance(move, Take_Card) or isinstance(move, Call_Cheat) or isinstance(move, Claim):
             if isinstance(move, Claim):
                 card_count = 0
+
+                # adding to table known cards the cards that I really
                 for card in self.cards:
                     if card.rank == move.rank and (card not in self._table_known_cards) and card_count < move.count:
                         self._table_known_cards.append(card)
+                        card_count += 1
             return move
+
+        self.is_last_cheat = True
 
         cheat_move = self.get_cheat(table_count)
 
@@ -106,10 +131,7 @@ class Agent_70(Agent):
             elif isinstance(move, Take_Card):
                 scores[move] = 0.6
             elif isinstance(move, Call_Cheat):
-                if last_claim:
-                    scores[move] = self.call_cheat_prob[last_claim.count]
-                else:
-                    scores[move] = 0.0
+                scores[move] = self.call_cheat_prob[last_claim.count]
         if available_claim:
             scores[Cheat()] = self.cheat_prob["AVAIL_CLAIMS"]
         else:
@@ -124,8 +146,9 @@ class Agent_70(Agent):
     def need_to_call_cheat(self, opponent_count, last_action, last_claim):
         if opponent_count == 0:
             return True
+
+        rank_table_cards = 0
         if last_action == ActionEnum.MAKE_CLAIM:
-            rank_table_cards = 0
             for card in self._table_known_cards:
                 if card.rank == last_claim.rank:
                     rank_table_cards += 1
@@ -133,7 +156,33 @@ class Agent_70(Agent):
                 if card.rank == last_claim.rank:
                     rank_table_cards += 1
 
+            # there is only 4 cards of each number,
+            # so I know for sure that the opponent had cheat
             if rank_table_cards + last_claim.count > 4:
+                return True
+
+        rank_claim_cards = 0
+        for card in self._opponent_claims:
+            if card.rank == last_claim.rank:
+                rank_claim_cards += 1
+
+
+        #if the total cards I know + the cards he claimed in the past + the cards he claimed jest now is more then 4
+        #he either cheat now or he had cheat before
+        #I would like to "claim cheat" in some probability depends on the size of the
+        # TODO change the probabilities and add more conditions
+        x = last_claim.count
+        if rank_claim_cards + rank_table_cards + last_claim.count > 7:
+            if random.random() > 0.8:
+                return True
+        if rank_claim_cards + rank_table_cards + last_claim.count > 6:
+            if random.random() > 0.8:
+                return True
+        if rank_claim_cards + rank_table_cards + last_claim.count > 5:
+            if random.random() > 0.8:
+                return True
+        if rank_claim_cards + rank_table_cards + last_claim.count > 4:
+            if random.random() > 0.3:
                 return True
 
         return False
