@@ -186,7 +186,21 @@ class Agent_70(Agent):
                 return True
 
         return False
-
-
+    """
+    if we have cards close to the card we are going to put from both sides
+    we better put only one of that card because the other will be useful later
+    """
+    def is_to_separate(self, move):
+        is_close_up = False
+        is_close_down = False
+        # choose cheat rank based on distance to remaining agent's card
+        for card in self.cards:
+            if card.rank - move.rank > 0 and card.rank - move.rank < 4:
+                is_close_up = True
+            if move.rank - card.rank > 0 and move.rank - card.rank < 4:
+                is_close_down = True
+        if is_close_up and is_close_down:
+            return True
+        return False
 cheat = Game(Agent_70("Demo 1"), Human("me"))
 cheat.play()
