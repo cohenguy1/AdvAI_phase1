@@ -47,6 +47,7 @@ class Agent_70(Agent):
         if last_action == ActionEnum.CALL_CHEAT:
             self._table_known_cards = []
             self._opponent_claims = []
+            self._my_claims = []
             if not self.is_last_cheat:
                 for card in cards_revealed:
                     self._opponent_cards.append(card)
@@ -54,6 +55,8 @@ class Agent_70(Agent):
                 # if I had cheat and the opponent called cheat he now know the cards I get
                 for card in cards_revealed:
                     self._my_known_cards.append(card)
+                    if card in self._opponent_cards:
+                        self._opponent_cards.remove(card)
 
         if last_action == ActionEnum.MAKE_CLAIM:
             self._opponent_claims.append(last_claim)
@@ -65,6 +68,10 @@ class Agent_70(Agent):
             if self.need_to_call_cheat(opponent_count, last_action, last_claim):
                 for move in honest_moves:
                     if isinstance(move, Call_Cheat):
+                        self._table_known_cards = []
+                        self._opponent_claims = []
+                        self._my_claims = []
+                        # TODO add revealed cards to _opponent_cards or _my_known_cards
                         return move
 
         move = self.get_best_move(last_claim, honest_moves)
@@ -73,7 +80,7 @@ class Agent_70(Agent):
             if isinstance(move, Claim):
                 card_count = 0
 
-                # adding to table known cards the cards that I really
+                # adding to table known cards the cards that I really put down
                 for card in self.cards:
                     if card.rank == move.rank and (card not in self._table_known_cards) and card_count < move.count:
                         self._table_known_cards.append(card)
@@ -83,6 +90,12 @@ class Agent_70(Agent):
         self.is_last_cheat = True
 
         cheat_move = self.get_cheat(table_count)
+
+        # if can't cheat take a card
+        if cheat_move == 0:
+            for move in honest_moves:
+                if isinstance(move, Take_Card):
+                    return move;
 
         for card in cheat_move.cards:
             self._table_known_cards.append(card)
@@ -106,12 +119,44 @@ class Agent_70(Agent):
             cheat_rank = rank_below
         cheat_count = 1
 
+        rank_above_table_cards = 0
+        # for card in self._opponent_claims:
+        #     if card.rank == rank_above:
+        #         rank_above_table_cards += 1
+        for card in self._opponent_cards:
+            if card.rank == rank_above:
+                rank_above_table_cards += 1
+
+        rank_below_table_cards = 0
+        # for card in self._opponent_claims:
+        #     if card.rank == rank_above:
+        #         rank_below_table_cards += 1
+        for card in self._opponent_cards:
+            if card.rank == rank_above:
+                rank_below_table_cards += 1
+
+        if (rank_below_table_cards > 2 and rank_above_table_cards < 3) or rank_below_table_cards == 4:
+            cheat_rank = rank_above
+        elif (rank_above_table_cards > 2 and rank_below_table_cards < 3) or rank_above_table_cards == 4:
+            cheat_rank = rank_below
+
+        if rank_below_table_cards == 4 and rank_above_table_cards == 4:
+            return 0
+
         # decaying function of number of cards on the table - cheat less when risk is large
         r = 0.5 * exp(-0.1 * table_count)
 
         # choose cheat count
         while cheat_count < 4 and random.random() < r and len(self.cards) >= (cheat_count + 1):
             cheat_count += 1
+
+        opponent_rank = 0
+        for card in self._opponent_cards:
+            if cheat_rank == card.rank:
+                opponent_rank += 1
+        # if the opponent have 2 cards or more from the rank I cheat on, I would cheat with only one card
+        if opponent_rank > 1:
+            cheat_count = 1
 
         # select cards furthest from current claim rank
         dist = defaultdict(int)
@@ -136,14 +181,21 @@ class Agent_70(Agent):
             scores[Cheat()] = self.cheat_prob["AVAIL_CLAIMS"]
         else:
             scores[Cheat()] = self.cheat_prob["NO_MOVES"]
+
+        # I don't want to cheat on my last card because the opponent will certainly "call cheat"
+        if self.cards.count == 1:
+            scores[Cheat()] = -1
+
         # randomize scores add random \in [-0.5..0.5)
         for move, score in scores.iteritems():
-            scores[move] = score + 0.5 * (2.0 * random.random() - 1)
+            scores[move] = score + random.random() - 0.5
+
         # select move based on max score
         move = max(scores, key=scores.get)
         return move
 
     def need_to_call_cheat(self, opponent_count, last_action, last_claim):
+        # if the opponent just got rid of his last cards our only option is to call cheat
         if opponent_count == 0:
             return True
 
@@ -202,5 +254,6 @@ class Agent_70(Agent):
         if is_close_up and is_close_down:
             return True
         return False
+
 cheat = Game(Agent_70("Demo 1"), Human("me"))
 cheat.play()
