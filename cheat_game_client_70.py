@@ -52,6 +52,12 @@ def ranks_count(cards):
 
     return len(ranks)
 
+def get_furthest_cards(cards, cheat_rank, count):
+    dist = defaultdict(int)
+    for ind, card in enumerate(cards):
+        dist[card] = cheat_rank.dist(card.rank)
+    claim_cards = sorted(dist, key=dist.get, reverse=True)[:count]
+    return claim_cards
 
 class Agent_70(Agent):
     def __init__(self, name):
@@ -104,16 +110,17 @@ class Agent_70(Agent):
             elif last_action == ActionEnum.TAKE_CARD:
                 self._opponent_actions.append(Take_Card())
 
-        if table_count < 2:
-            move = self.empty_table_cheat()
-
         # if any one of the players called cheat, update known information
         if last_action == ActionEnum.CALL_CHEAT or isinstance(self._my_last_move, Call_Cheat):
             self.init_known_information(last_action, cards_revealed)
         elif isinstance(self._my_last_move, Take_Card):
             self.add_new_card_to_my_list()
 
-        if 'move' not in locals():
+        if self.need_to_call_cheat(deck_count, table_count, opponent_count, last_action, last_claim, honest_moves):
+            move = get_call_cheat_move(honest_moves)
+        elif table_count < 2 and len(self.cards) > 1:
+            move = self.empty_table_cheat()
+        else:
             move = self.get_best_move(last_claim, honest_moves)
 
             if isinstance(move, Cheat):
@@ -190,41 +197,31 @@ class Agent_70(Agent):
         # TODO: if the opponent knows that i have 2 or more cards, lie about them in a certain probability,
         # and tell the truth in a certain probability in the next move
         # Cheat
-        top_rank = self.table.top_rank()
-        rank_above = Rank.above(top_rank)
-        rank_below = Rank.below(top_rank)
-        rank_above_score = rank_below_score = 0
-
-        # choose cheat rank based on distance to remaining agent's card
-        for card in self.cards:
-            rank_above_score += card.rank.dist(rank_above)
-            rank_below_score += card.rank.dist(rank_below)
-        if rank_above_score < rank_below_score:
-            cheat_rank = rank_above
-        else:
-            cheat_rank = rank_below
+        cheat_rank = self.get_cheat_rank()
         cheat_count = 1
 
         rank_above_table_cards = 0
+
         # for card in self._opponent_claims:
         #     if card.rank == rank_above:
         #         rank_above_table_cards += 1
-        for card in self._opponent_cards:
-            if card.rank == rank_above:
-                rank_above_table_cards += 1
+        #for card in self._opponent_cards:
+        #    if card.rank == rank_above:
+        #        rank_above_table_cards += 1
 
         rank_below_table_cards = 0
+
         # for card in self._opponent_claims:
         #     if card.rank == rank_above:
         #         rank_below_table_cards += 1
-        for card in self._opponent_cards:
-            if card.rank == rank_above:
-                rank_below_table_cards += 1
+        #for card in self._opponent_cards:
+        #    if card.rank == rank_above:
+        #        rank_below_table_cards += 1
 
-        if (rank_below_table_cards > 2 and rank_above_table_cards < 3) or rank_below_table_cards == 4:
-            cheat_rank = rank_above
-        elif (rank_above_table_cards > 2 and rank_below_table_cards < 3) or rank_above_table_cards == 4:
-            cheat_rank = rank_below
+        #if (rank_below_table_cards > 2 and rank_above_table_cards < 3) or rank_below_table_cards == 4:
+        #    cheat_rank = rank_above
+        #elif (rank_above_table_cards > 2 and rank_below_table_cards < 3) or rank_above_table_cards == 4:
+        #    cheat_rank = rank_below
 
         if rank_below_table_cards == 4 and rank_above_table_cards == 4:
             return 0
@@ -245,10 +242,7 @@ class Agent_70(Agent):
             cheat_count = 1
 
         # select cards furthest from current claim rank
-        dist = defaultdict(int)
-        for ind, card in enumerate(self.cards):
-            dist[card] = cheat_rank.dist(card.rank)
-        claim_cards = sorted(dist, key=dist.get)[:cheat_count]
+        claim_cards = get_furthest_cards(self.cards, cheat_rank, cheat_count)
         return Cheat(claim_cards, cheat_rank, cheat_count)
 
     def get_best_move(self, last_claim, honest_moves):
@@ -320,13 +314,17 @@ class Agent_70(Agent):
         already_claimed_rank = False
         opponent_taken_cards_since_same_claim = 0
         if len(self._opponent_actions) > 0:
-            for opp_action in reversed(self._opponent_actions)[:-1]:
+            for opp_action in reversed(self._opponent_actions[:-1]):
                 if isinstance(opp_action, Take_Card):
                     opponent_taken_cards_since_same_claim += 1
                 elif isinstance(opp_action, Claim) and opp_action.rank == last_claim.rank:
                     already_claimed_rank = True
                     if opp_action.count != last_claim.count:
-                        # count the take card count and check what's the probability the opponent will get this card (with number of cards)
+                        if deck_count + opponent_taken_cards_since_same_claim == 0:
+                            return True
+
+                        # count the take card count and check what's the probability
+                        # the opponent will get this card (with number of cards)
                         probability_that_matching_card_pulled = opponent_taken_cards_since_same_claim / float(
                                 deck_count + opponent_taken_cards_since_same_claim)
                         if random.random() > probability_that_matching_card_pulled + 0.1:
@@ -411,7 +409,7 @@ class Agent_70(Agent):
             return True
         return False
 
-    def empty_table_cheat(self):
+    def get_cheat_rank(self):
         top_rank = self.table.top_rank()
         rank_above = Rank.above(top_rank)
         rank_below = Rank.below(top_rank)
@@ -425,27 +423,33 @@ class Agent_70(Agent):
             cheat_rank = rank_above
         else:
             cheat_rank = rank_below
-        cheat_count = 3
+
+        return cheat_rank
+
+    def empty_table_cheat(self):
+        cheat_rank = self.get_cheat_rank()
+
+        # in the worst case, be with one card left
+        cheat_count = min(3, len(self.cards) - 1)
 
         # select cards furthest from current claim rank
-        dist = defaultdict(int)
-        for ind, card in enumerate(self.cards):
-            dist[card] = cheat_rank.dist(card.rank)
-        claim_cards = sorted(dist, key=dist.get)[:cheat_count]
+        claim_cards = get_furthest_cards(self.cards, cheat_rank, cheat_count)
         return Cheat(claim_cards, cheat_rank, cheat_count)
 
 
-demo_score = 0
 agent_score = 0
-for i in range(1, 100):
-    demo = DemoAgent("Demo 1")
-    my_agent = Agent_70("Agent70")
-    cheat = Game(demo, my_agent)
+agent_oldver_score = 0
+for i in range(0, 1000):
+    agent_oldver = DemoAgent("Demo Agent Old Ver.")
+    agent_oldver.set_id(1)
+    agent = Agent_70("Agent 70")
+    agent.set_id(2)
+    cheat = Game(agent_oldver, agent)
     cheat.play()
     if cheat.end_of_game():
-        if (cheat.winner == demo.get_id()):
-            demo_score += 1
-        else:
+        if cheat.winner == agent:
             agent_score += 1
-        print 'Demo1 wins: {0}'.format(demo_score)
-        print 'Agent70 wins: {0}'.format(agent_score)
+        else:
+            agent_oldver_score += 1
+        print '{0} wins: {1}'.format(agent_oldver.name, agent_oldver_score)
+        print '{0} wins: {1}'.format(agent.name, agent_score)

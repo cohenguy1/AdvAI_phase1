@@ -59,6 +59,7 @@ class Agent(Player):
             for move in honest_moves:
                 if isinstance(move, Call_Cheat):
                     action = move
+
         assert (action in honest_moves or isinstance(action, Cheat))
         if isinstance(action, Call_Cheat):
             self.call_cheat()
