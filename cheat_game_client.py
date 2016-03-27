@@ -12,7 +12,7 @@ class Agent(Player):
     def __init__(self, name):
         super(Agent, self).__init__(name)
         self._cards_revealed = []
-        self._silent = True
+        self._silent = False
 
     def make_claim(self, cards, claim):
         if not self._silent: print 'making claim: {0:1d} cards of rank {1}'.format(claim.count, str(claim.rank))
