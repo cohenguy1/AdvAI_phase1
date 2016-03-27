@@ -124,7 +124,11 @@ class Agent_70(Agent):
             elif last_action == ActionEnum.TAKE_CARD:
                 self._opponent_actions.append(Take_Card())
 
+        if deck_count == 0 and isinstance(move, Take_Card):
+            move = get_call_cheat_move(honest_moves)
+
         self._my_last_move = move
+
         return move
 
     def init_known_information(self, last_action, cards_revealed):
