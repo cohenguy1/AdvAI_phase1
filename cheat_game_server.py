@@ -221,7 +221,7 @@ class Player(object):
             self.table = self.game.table
             self.deck = self.game.deck
 
-    def take_card_from_deck(self, silent=False):
+    def take_card_from_deck(self):
         """
         takes the top card from the deck\n
         :return: None
@@ -235,8 +235,8 @@ class Player(object):
         :return: cards
         """
         cards = self.table.take_cards()
-        print 'Player {0} "{1}" received the cards from the table'.format(self.id, self.name)
-        print '  Cards: ', ' '.join([str(card).strip() for card in cards])
+        #print 'Player {0} "{1}" received the cards from the table'.format(self.id, self.name)
+        #print '  Cards: ', ' '.join([str(card).strip() for card in cards])
         self.cards.extend(cards)
         return cards
 
@@ -653,7 +653,7 @@ class Game:
         # deal 2 8 card hands
         for player in self.__players:
             for _ in xrange(8):
-                player.take_card_from_deck(silent=True)
+                player.take_card_from_deck()
         # place a card on the table (not a Joker)
         card = None
         while True:

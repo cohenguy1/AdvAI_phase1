@@ -12,28 +12,29 @@ class Agent(Player):
     def __init__(self, name):
         super(Agent, self).__init__(name)
         self._cards_revealed = []
+        self._silent = True
 
     def make_claim(self, cards, claim):
-        print 'making claim: {0:1d} cards of rank {1}'.format(claim.count, str(claim.rank))
+        if not self._silent: print 'making claim: {0:1d} cards of rank {1}'.format(claim.count, str(claim.rank))
         super(Agent, self).make_claim(cards, claim)
 
     def make_honest_claim(self, claim):
         super(Agent, self).make_honest_claim(claim)
 
-    def take_card_from_deck(self, silent=False):
-        if not silent: print 'Taking Card from deck'
+    def take_card_from_deck(self):
+        if not self._silent: print 'Taking Card from deck'
         super(Agent, self).take_card_from_deck()
 
     def call_cheat(self):
-        print 'Calling "Cheat!"'
+        if not self._silent: print 'Calling "Cheat!"'
         super(Agent, self).call_cheat()
         state = self.game.get_state()
         self._cards_revealed = state['CARDS_REVEALED']
 
     def make_move(self):
-        print
-        print 'Player {0:1d} ({1:s}) turn'.format(self.id, self.name)
-        print "================"+"="*len(self.name)
+        if not self._silent: print
+        if not self._silent: print 'Player {0:1d} ({1:s}) turn'.format(self.id, self.name)
+        if not self._silent: print "================"+"="*len(self.name)
         honest_moves = self.possible_honest_moves()
         state = self.game.get_state()
         opponent_count = state[3 - self.id]
@@ -44,15 +45,20 @@ class Agent(Player):
         last_claim = self.game.last_claim()
 
         if last_claim:
-            print "Last Claim: {0} cards of rank {1}".format(last_claim.count, str(last_claim.rank))
-        print "Number of opponent cards: {0:2d}".format(opponent_count)
-        print "Your Cards: ", ','.join([str(card) for card in self.cards])
-        print "Deck count: {0}".format(len(self.deck._cards))
-        print "Table count: {0}".format(len(self.table._cards))
+            if not self._silent: print "Last Claim: {0} cards of rank {1}".format(last_claim.count, str(last_claim.rank))
+        if not self._silent: print "Number of opponent cards: {0:2d}".format(opponent_count)
+        if not self._silent: print "Your Cards: ", ','.join([str(card) for card in self.cards])
+        if not self._silent: print "Deck count: {0}".format(len(self.deck._cards))
+        if not self._silent: print "Table count: {0}".format(len(self.table._cards))
 
         # if opponent placed his last cards on the table - call_cheat or lose
         action = self.agent_logic(deck_count, table_count, opponent_count,
                                   last_action, last_claim, honest_moves, cards_revealed)
+        # print action
+        if not action:
+            for move in honest_moves:
+                if isinstance(move, Call_Cheat):
+                    action = move
         assert (action in honest_moves or isinstance(action, Cheat))
         if isinstance(action, Call_Cheat):
             self.call_cheat()
@@ -85,7 +91,9 @@ class DemoAgent(Agent):
         """
         scores = {}
         if opponent_count == 0:
-            return Call_Cheat()
+            for move in honest_moves:
+                if isinstance(move, Call_Cheat):
+                    return move
         available_claim = False
         for move in honest_moves:
             if isinstance(move, Claim):
