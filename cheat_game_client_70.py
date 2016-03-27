@@ -80,6 +80,8 @@ class Agent_70(Agent):
         self._my_last_move_cards = create_my_cards_list(self.cards)
         # cards that the opponent know I had
         self._my_known_cards = []
+        # number of times we try to cheat in a row and the opponent call cheat
+        self._stuck_counter = 0
 
     """
     This function implements action logic / move selection for the agent\n
@@ -95,8 +97,14 @@ class Agent_70(Agent):
 
     def agent_logic(self, deck_count, table_count, opponent_count,
                     last_action, last_claim, honest_moves, cards_revealed):
-        if table_count < 2:
+
+        if last_action == ActionEnum.CALL_CHEAT:
+            self._stuck_counter += 1
+        else:
+            self._stuck_counter = 0
+        if table_count < 2 and self._stuck_counter < 200:
             move = self.empty_table_cheat()
+
 
         # if any one of the players called cheat, update known information
         if last_action == ActionEnum.CALL_CHEAT or isinstance(self._my_last_move, Call_Cheat):
