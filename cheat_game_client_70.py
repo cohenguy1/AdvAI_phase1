@@ -6,7 +6,7 @@ from cheat_game_server import Game
 from cheat_game_server import Player, Human
 from cheat_game_server import Claim, Take_Card, Cheat, Call_Cheat
 from cheat_game_server import Rank, Suit, Card, ActionEnum
-from cheat_game_client import Agent
+from cheat_game_client import Agent, DemoAgent
 
 
 # TODO add an array of cards that the opponent has and go through revealed cards to know what the opponent has/doesn't have
@@ -404,5 +404,16 @@ class Agent_70(Agent):
         return False
 
 
-cheat = Game(Agent_70("Demo 1"), Agent_70("me"))
-cheat.play()
+
+demo_score = 0
+agent_score = 0
+for i in range(1, 1000):
+    demo = DemoAgent("Demo 1")
+    my_agent = Agent_70("me")
+    cheat = Game(demo, my_agent)
+    cheat.play()
+    if cheat.end_of_game():
+        if (cheat.winner == demo.get_id()):
+            demo_score += 1
+        else:
+            agent_score += 1
