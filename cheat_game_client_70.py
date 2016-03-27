@@ -151,6 +151,8 @@ class Agent_70(Agent):
                 # if I had cheat and the opponent called cheat he now know the cards I get
                 for card in cards_revealed:
                     self._my_known_cards.append(card)
+                    if card in self._opponent_cards:
+                        self._opponent_cards.remove(card)
             else:
                 # Opponent call cheat was wrong, I know the opponent cards
                 for card in cards_revealed:
@@ -161,6 +163,8 @@ class Agent_70(Agent):
                 for card in self.cards:
                     if not self.is_card_in_last_move(card):
                         self._my_known_cards.append(card)
+                        if card in self._opponent_cards:
+                            self._opponent_cards.remove(card)
             else:
                 self._opponent_times_cheated += 1
                 # I know opponent cards
@@ -192,7 +196,6 @@ class Agent_70(Agent):
         return card_found
 
     def get_cheat(self, table_count):
-        # TODO: always lie on 3 cards when table is empty (distant cards)
         # TODO: cheat on previous claim of 2 ( 3 is large) at the start of the game
         # TODO: if the opponent knows that i have 2 or more cards, lie about them in a certain probability,
         # and tell the truth in a certain probability in the next move
@@ -262,8 +265,6 @@ class Agent_70(Agent):
                     scores[move] = 0.6
 
         if are_cards_same_rank(self.cards):
-            # TODO: always cheat when table is empty!
-            # TODO: lie on 3 or less, leaving 1 card to discard
             scores[Cheat()] = -0.5
         else:
             if available_claim:
