@@ -95,17 +95,19 @@ class Agent_70(Agent):
 
     def agent_logic(self, deck_count, table_count, opponent_count,
                     last_action, last_claim, honest_moves, cards_revealed):
+        if table_count < 2:
+            move = self.empty_table_cheat()
 
         # if any one of the players called cheat, update known information
         if last_action == ActionEnum.CALL_CHEAT or isinstance(self._my_last_move, Call_Cheat):
             self.init_known_information(last_action, cards_revealed)
         elif isinstance(self._my_last_move, Take_Card):
             self.add_new_card_to_my_list()
+        if not move:
+            move = self.get_best_move(last_claim, honest_moves)
 
-        move = self.get_best_move(last_claim, honest_moves)
-
-        if isinstance(move, Cheat):
-            move = self.get_cheat(table_count)
+            if isinstance(move, Cheat):
+                move = self.get_cheat(table_count)
 
             # if can't cheat take a card
             if move == 0:
@@ -403,6 +405,28 @@ class Agent_70(Agent):
             return True
         return False
 
+    def empty_table_cheat(self):
+        top_rank = self.table.top_rank()
+        rank_above = Rank.above(top_rank)
+        rank_below = Rank.below(top_rank)
+        rank_above_score = rank_below_score = 0
+
+        # choose cheat rank based on distance to remaining agent's card
+        for card in self.cards:
+            rank_above_score += card.rank.dist(rank_above)
+            rank_below_score += card.rank.dist(rank_below)
+        if rank_above_score < rank_below_score:
+            cheat_rank = rank_above
+        else:
+            cheat_rank = rank_below
+        cheat_count = 3
+
+        # select cards furthest from current claim rank
+        dist = defaultdict(int)
+        for ind, card in enumerate(self.cards):
+            dist[card] = cheat_rank.dist(card.rank)
+        claim_cards = sorted(dist, key=dist.get)[:cheat_count]
+        return Cheat(claim_cards, cheat_rank, cheat_count)
 
 cheat = Game(Agent_70("Demo 1"), Agent_70("me"))
 cheat.play()
