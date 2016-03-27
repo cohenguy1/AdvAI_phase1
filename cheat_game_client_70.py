@@ -177,6 +177,10 @@ class Agent_70(Agent):
         return card_found
 
     def get_cheat(self, table_count):
+        # TODO: always lie on 3 cards when table is empty (distant cards)
+        # TODO: cheat on previous claim of 2 ( 3 is large) at the start of the game
+        # TODO: if the opponent knows that i have 2 or more cards, lie about them in a certain probability,
+        # and tell the truth in a certain probability in the next move
         # Cheat
         top_rank = self.table.top_rank()
         rank_above = Rank.above(top_rank)
@@ -251,7 +255,8 @@ class Agent_70(Agent):
                 scores[move] = 0.6
 
         if are_cards_same_rank(self.cards):
-            # TODO: always cheat! maximize scores
+            # TODO: always cheat when table is empty!
+            # TODO: lie on 3 or less, leaving 1 card to discard
             scores[Cheat()] = -0.5
         else:
             if available_claim:
@@ -269,6 +274,8 @@ class Agent_70(Agent):
         return move
 
 
+    # TODO: at the beginning of the game (by the deck size), if the opponent is claiming for 2 or more,
+    # call cheat at a certain percentile
     def need_to_call_cheat(self, deck_count, table_count, opponent_count, last_action, last_claim, honest_moves):
         if not last_action == ActionEnum.MAKE_CLAIM:
             return False
@@ -318,6 +325,7 @@ class Agent_70(Agent):
                             return True
                     else:
                         # opponent cheated before or cheats right now
+                        # TODO: identify the cheat probability of the opponent
                         if random.random() < self._opponent_cheat_probability:
                             return True
 
@@ -396,5 +404,5 @@ class Agent_70(Agent):
         return False
 
 
-cheat = Game(Agent_70("Demo 1"), Human("me"))
+cheat = Game(Agent_70("Demo 1"), Agent_70("me"))
 cheat.play()
