@@ -308,14 +308,6 @@ class Agent_70(Agent):
             if card.rank == last_claim.rank:
                 opponent_cards_count_of_rank += 1
 
-        # in case the opponent has the last card to complete the suit, but we think he doesn't have it
-        if rank_known_cards + last_claim.count == 4 and last_claim.count == 1 and opponent_cards_count_of_rank < 1:
-            probability_that_opponent_true = opponent_count / float(deck_count + opponent_count)
-
-            # random the probability that the opponent has the cards
-            if random.random() > probability_that_opponent_true + 0.1:
-                return True
-
         already_claimed_rank = False
         opponent_taken_cards_since_same_claim = 0
         if len(self._opponent_actions) > 0:
@@ -342,6 +334,15 @@ class Agent_70(Agent):
                             return True
 
         if not already_claimed_rank:
+
+            # in case the opponent has the last card to complete the suit, but we think he doesn't have it
+            if rank_known_cards + last_claim.count == 4 and last_claim.count == 1 and opponent_cards_count_of_rank < 1:
+                probability_that_opponent_true = opponent_count / float(deck_count + opponent_count)
+
+                # random the probability that the opponent has the cards
+                if random.random() > probability_that_opponent_true + 0.1:
+                    return True
+
             # define a probability to call cheat, based on deck count, opponent cards count, time opponent cheated,
             # table count, claim count
 
