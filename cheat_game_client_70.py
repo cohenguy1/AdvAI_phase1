@@ -6,7 +6,7 @@ from cheat_game_server import Game
 from cheat_game_server import Player, Human
 from cheat_game_server import Claim, Take_Card, Cheat, Call_Cheat
 from cheat_game_server import Rank, Suit, Card, ActionEnum
-from cheat_game_client import Agent
+from cheat_game_client import Agent, DemoAgent
 
 
 # TODO add an array of cards that the opponent has and go through revealed cards to know what the opponent has/doesn't have
@@ -105,13 +105,21 @@ class Agent_70(Agent):
         if table_count < 2 and self._stuck_counter < 200:
             move = self.empty_table_cheat()
 
+        # keep record of opponent actions
+        if last_action == ActionEnum.MAKE_CLAIM or last_action == ActionEnum.TAKE_CARD:
+            if last_action == ActionEnum.MAKE_CLAIM:
+                self._opponent_claims.append(last_claim)
+                self._opponent_actions.append(last_claim)
+            elif last_action == ActionEnum.TAKE_CARD:
+                self._opponent_actions.append(Take_Card())
 
         # if any one of the players called cheat, update known information
         if last_action == ActionEnum.CALL_CHEAT or isinstance(self._my_last_move, Call_Cheat):
             self.init_known_information(last_action, cards_revealed)
         elif isinstance(self._my_last_move, Take_Card):
             self.add_new_card_to_my_list()
-        if not move:
+
+        if 'move' not in locals():
             move = self.get_best_move(last_claim, honest_moves)
 
             if isinstance(move, Cheat):
@@ -123,14 +131,6 @@ class Agent_70(Agent):
 
         if isinstance(move, Claim) or isinstance(move, Cheat):
             self.add_to_table_known_cards(move)
-
-        # keep record of opponent actions
-        if last_action == ActionEnum.MAKE_CLAIM or last_action == ActionEnum.TAKE_CARD:
-            if last_action == ActionEnum.MAKE_CLAIM:
-                self._opponent_claims.append(last_claim)
-                self._opponent_actions.append(last_claim)
-            elif last_action == ActionEnum.TAKE_CARD:
-                self._opponent_actions.append(Take_Card())
 
         if deck_count == 0 and isinstance(move, Take_Card):
             move = get_call_cheat_move(honest_moves)
@@ -326,7 +326,7 @@ class Agent_70(Agent):
         already_claimed_rank = False
         opponent_taken_cards_since_same_claim = 0
         if len(self._opponent_actions) > 0:
-            for opp_action in reversed(self._opponent_actions):
+            for opp_action in reversed(self._opponent_actions)[:-1]:
                 if isinstance(opp_action, Take_Card):
                     opponent_taken_cards_since_same_claim += 1
                 elif isinstance(opp_action, Claim) and opp_action.rank == last_claim.rank:
@@ -440,5 +440,18 @@ class Agent_70(Agent):
         claim_cards = sorted(dist, key=dist.get)[:cheat_count]
         return Cheat(claim_cards, cheat_rank, cheat_count)
 
-cheat = Game(Agent_70("Demo 1"), Agent_70("me"))
-cheat.play()
+
+demo_score = 0
+agent_score = 0
+for i in range(1, 100):
+    demo = DemoAgent("Demo 1")
+    my_agent = Agent_70("Agent70")
+    cheat = Game(demo, my_agent)
+    cheat.play()
+    if cheat.end_of_game():
+        if (cheat.winner == demo.get_id()):
+            demo_score += 1
+        else:
+            agent_score += 1
+        print 'Demo1 wins: {0}'.format(demo_score)
+        print 'Agent70 wins: {0}'.format(agent_score)
