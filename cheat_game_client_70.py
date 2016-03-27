@@ -6,8 +6,47 @@ from cheat_game_server import Game
 from cheat_game_server import Player, Human
 from cheat_game_server import Claim, Take_Card, Cheat, Call_Cheat
 from cheat_game_server import Rank, Suit, Card, ActionEnum
-
 from cheat_game_client import Agent
+
+
+# TODO add an array of cards that the opponent has and go through revealed cards to know what the opponent has/doesn't have
+# also update opponent cheat probability
+
+def are_cards_same_rank(cards):
+    if len(cards) <= 1:
+        return True
+
+    first_card_rank = cards[0].rank
+    for card in cards:
+        if card.rank != first_card_rank:
+            return False
+    return True
+
+
+def get_call_cheat_move(honest_moves):
+    for move in honest_moves:
+        if isinstance(move, Call_Cheat):
+            return move
+
+
+def create_my_cards_list(cards):
+    my_cards = []
+    for card in cards:
+        my_cards.append(Card(card.rank, card.suit))
+    return my_cards
+
+
+def ranks_count(cards):
+    ranks = {}
+
+    for card in cards:
+        if ranks.get(card.rank):
+            ranks[card.rank] += 1
+        else:
+            ranks[card.rank] = 1
+
+    return len(ranks)
+
 
 class Agent_70(Agent):
     def __init__(self, name):
@@ -16,16 +55,24 @@ class Agent_70(Agent):
         self._my_claims = []
         # cards that the opponents
         self._opponent_claims = []
+        # opponent actions
+        self._opponent_actions = []
         # cards who was at my hand and the opponent took
         self._opponent_cards = []
         # cards that I have discard
         self._table_known_cards = []
+        # number of times the opponent cheated
+        self._opponent_times_cheated = 0
+        # probability of opponent cheat
+        self._opponent_cheat_probability = 0
         # probability to decide to cheat
-        self.cheat_prob = {"NO_MOVES": 0.6, "AVAIL_CLAIMS": 0.1}
+        self.cheat_prob = {"NO_MOVES": 0.33, "AVAIL_CLAIMS": 0.1}
         # probability to decide to call cheat
-        self.call_cheat_prob = {1: 0.06, 2: 0.011, 3: 0.28, 4: 0.47}
+        self.call_cheat_prob = {1: 0.06, 2: 0.014, 3: 0.2, 4: 0.25}
         # did I cheat in my last move
-        self.is_last_cheat = False
+        self._my_last_move = Take_Card()
+        # my last move cards
+        self._my_last_move_cards = create_my_cards_list(self.cards)
         # cards that the opponent know I had
         self._my_known_cards = []
 
@@ -40,54 +87,88 @@ class Agent_70(Agent):
     :param cards_revealed: if last action was "call cheat" cards on table were revealed
     :return: Action object Call_Cheat or Claim or Take_Card or Cheat
     """
+
     def agent_logic(self, deck_count, table_count, opponent_count,
                     last_action, last_claim, honest_moves, cards_revealed):
 
-        # update known information
+        # if any one of the players called cheat, update known information
+        if last_action == ActionEnum.CALL_CHEAT or isinstance(self._my_last_move, Call_Cheat):
+            self.init_known_information(last_action, cards_revealed)
+        elif isinstance(self._my_last_move, Take_Card):
+            self.add_new_card_to_my_list()
+
+        if self.need_to_call_cheat(deck_count, table_count, opponent_count, last_action, last_claim, honest_moves):
+            move = get_call_cheat_move(honest_moves)
+        else:
+            move = self.get_best_move(last_claim, honest_moves)
+
+            if isinstance(move, Claim) or isinstance(move, Cheat):
+                if isinstance(move, Cheat):
+                    move = self.get_cheat(table_count)
+
+                self.add_to_table_known_cards(move)
+
+        # keep record of opponent actions
+        if last_action == ActionEnum.MAKE_CLAIM or last_action == ActionEnum.TAKE_CARD:
+            if last_action == ActionEnum.MAKE_CLAIM:
+                self._opponent_claims.append(last_claim)
+                self._opponent_actions.append(last_claim)
+            elif last_action == ActionEnum.TAKE_CARD:
+                self._opponent_actions.append(Take_Card())
+
+        self._my_last_move = move
+        return move
+
+    def init_known_information(self, last_action, cards_revealed):
+        self._table_known_cards = []
+        self._opponent_claims = []
+        self._opponent_actions = []
+
+        # in case opponent called cheat
         if last_action == ActionEnum.CALL_CHEAT:
-            self._table_known_cards = []
-            self._opponent_claims = []
-            if not self.is_last_cheat:
-                for card in cards_revealed:
-                    self._opponent_cards.append(card)
-            else:
+            if isinstance(self._my_last_move, Cheat):
                 # if I had cheat and the opponent called cheat he now know the cards I get
                 for card in cards_revealed:
                     self._my_known_cards.append(card)
-
-        if last_action == ActionEnum.MAKE_CLAIM:
-            self._opponent_claims.append(last_claim)
-
-        # reset variable
-        self.is_last_cheat = False
-
-        if last_claim:
-            if self.need_to_call_cheat(opponent_count, last_action, last_claim):
-                for move in honest_moves:
-                    if isinstance(move, Call_Cheat):
-                        return move
-
-        move = self.get_best_move(last_claim, honest_moves)
-
-        if isinstance(move, Take_Card) or isinstance(move, Call_Cheat) or isinstance(move, Claim):
-            if isinstance(move, Claim):
-                card_count = 0
-
-                # adding to table known cards the cards that I really
+            else:
+                # Opponent call cheat was wrong, I know the opponent cards
+                for card in cards_revealed:
+                    self._opponent_cards.append(card)
+        elif isinstance(self._my_last_move, Call_Cheat):
+            if len(self._my_last_move_cards) != len(self.cards):
+                # i was wrong calling cheat
                 for card in self.cards:
-                    if card.rank == move.rank and (card not in self._table_known_cards) and card_count < move.count:
-                        self._table_known_cards.append(card)
-                        card_count += 1
-            return move
+                    if not self.is_card_in_last_move(card):
+                        self._my_known_cards.append(card)
+            else:
+                self._opponent_times_cheated += 1
+                # TODO how do I know the cards that were revealed
+                # I know opponent cards
+                # for card in cards_revealed:
+                #    self._opponent_cards.append(card)
 
-        self.is_last_cheat = True
+    def add_to_table_known_cards(self, move):
+        card_count = 0
+        # adding to table known cards the cards that I really played
+        for card in self.cards:
+            if card.rank == move.rank and (card not in self._table_known_cards) and card_count < move.count:
+                self._table_known_cards.append(card)
+                for last_move_card in self._my_last_move_cards:
+                    if card.rank == last_move_card.rank and card.suit == last_move_card.suit:
+                        self._my_last_move_cards.remove(last_move_card)
+                card_count += 1
 
-        cheat_move = self.get_cheat(table_count)
+    def add_new_card_to_my_list(self):
+        for card in self.cards:
+            if not self.is_card_in_last_move(card):
+                self._my_last_move_cards.append(card)
 
-        for card in cheat_move.cards:
-            self._table_known_cards.append(card)
-
-        return cheat_move
+    def is_card_in_last_move(self, card):
+        card_found = False
+        for last_move_card in self._my_last_move_cards:
+            if card.rank == last_move_card.rank and card.suit == last_move_card.suit:
+                card_found = True
+        return card_found
 
     def get_cheat(self, table_count):
         # Cheat
@@ -110,7 +191,7 @@ class Agent_70(Agent):
         r = 0.5 * exp(-0.1 * table_count)
 
         # choose cheat count
-        while cheat_count < 4 and random.random() < r and len(self.cards) >= (cheat_count + 1):
+        while cheat_count < 4 and random.random() < r and len(self.cards) > (cheat_count + 1):
             cheat_count += 1
 
         # select cards furthest from current claim rank
@@ -130,62 +211,131 @@ class Agent_70(Agent):
                 available_claim = True
             elif isinstance(move, Take_Card):
                 scores[move] = 0.6
-            elif isinstance(move, Call_Cheat):
-                scores[move] = self.call_cheat_prob[last_claim.count]
-        if available_claim:
-            scores[Cheat()] = self.cheat_prob["AVAIL_CLAIMS"]
+        if are_cards_same_rank(self.cards):
+            # don't cheat on last cards!
+            scores[Cheat()] = -0.5
         else:
-            scores[Cheat()] = self.cheat_prob["NO_MOVES"]
+            if available_claim:
+                scores[Cheat()] = self.cheat_prob["AVAIL_CLAIMS"]
+            else:
+                scores[Cheat()] = self.cheat_prob["NO_MOVES"]
+
         # randomize scores add random \in [-0.5..0.5)
         for move, score in scores.iteritems():
             scores[move] = score + 0.5 * (2.0 * random.random() - 1)
+
         # select move based on max score
         move = max(scores, key=scores.get)
         return move
 
-    def need_to_call_cheat(self, opponent_count, last_action, last_claim):
+    def need_to_call_cheat(self, deck_count, table_count, opponent_count, last_action, last_claim, honest_moves):
+        if not last_action == ActionEnum.MAKE_CLAIM:
+            return False
+
         if opponent_count == 0:
             return True
 
-        rank_table_cards = 0
-        if last_action == ActionEnum.MAKE_CLAIM:
-            for card in self._table_known_cards:
-                if card.rank == last_claim.rank:
-                    rank_table_cards += 1
-            for card in self.cards:
-                if card.rank == last_claim.rank:
-                    rank_table_cards += 1
+        rank_known_cards = 0
+        for card in self._table_known_cards:
+            if card.rank == last_claim.rank:
+                rank_known_cards += 1
 
-            # there is only 4 cards of each number,
-            # so I know for sure that the opponent had cheat
-            if rank_table_cards + last_claim.count > 4:
+        for card in self.cards:
+            if card.rank == last_claim.rank:
+                rank_known_cards += 1
+
+        # there is only 4 cards of each number,
+        # so I know for sure that the opponent had cheat
+        if rank_known_cards + last_claim.count > 4:
+            return True
+
+        opponent_cards_count_of_rank = 0
+        for card in self._opponent_cards:
+            if card.rank == last_claim.rank:
+                opponent_cards_count_of_rank += 1
+
+        # in case the opponent has the last card to complete the suit, but we think he doesn't have it
+        if rank_known_cards + last_claim.count == 4 and last_claim.count == 1 and opponent_cards_count_of_rank < 1:
+            probability_that_opponent_true = opponent_count / float(deck_count + opponent_count)
+
+            # random the probability that the opponent has the cards
+            if random.random() > probability_that_opponent_true + 0.1:
                 return True
 
-        rank_claim_cards = 0
+        already_claimed_rank = False
+        opponent_taken_cards_since_same_claim = 0
+        if len(self._opponent_actions) > 0:
+            for opp_action in reversed(self._opponent_actions):
+                if isinstance(opp_action, Take_Card):
+                    opponent_taken_cards_since_same_claim += 1
+                elif isinstance(opp_action, Claim) and opp_action.rank == last_claim.rank:
+                    already_claimed_rank = True
+                    if opp_action.count != last_claim.count:
+                        # count the take card count and check what's the probability the opponent will get this card (with number of cards)
+                        probability_that_matching_card_pulled = opponent_taken_cards_since_same_claim / float(
+                                deck_count + opponent_taken_cards_since_same_claim)
+                        if random.random() > probability_that_matching_card_pulled + 0.1:
+                            return True
+                    else:
+                        # opponent cheated before or cheats right now
+                        if random.random() < self._opponent_cheat_probability:
+                            return True
+
+        if not already_claimed_rank:
+            # define a probability to call cheat, based on deck count, opponent cards count, time opponent cheated,
+            # table count, claim count
+
+            # decaying function of number of cards on the table - call cheat less when risk is large
+            cards_count_after_whatif_honest_play = self.get_cards_ranks_count_after_whatif_honest_move(honest_moves)
+            table_ranks_count = self.get_table_ranks_count(table_count)
+            decaying_function_param = table_ranks_count - cards_count_after_whatif_honest_play + opponent_count + self._opponent_times_cheated
+            call_cheat = 0.33 * exp(-0.1 * decaying_function_param)
+
+            if random.random() < call_cheat:
+                return True
+
+        all_prev_opponent_rank_claim_cards = 0
         for card in self._opponent_claims:
             if card.rank == last_claim.rank:
-                rank_claim_cards += 1
-
-
-        #if the total cards I know + the cards he claimed in the past + the cards he claimed jest now is more then 4
-        #he either cheat now or he had cheat before
-        #I would like to "claim cheat" in some probability depends on the size of the
-        # TODO change the probabilities and add more conditions
-        x = last_claim.count
-        if rank_claim_cards + rank_table_cards + last_claim.count > 7:
-            if random.random() > 0.8:
-                return True
-        if rank_claim_cards + rank_table_cards + last_claim.count > 6:
-            if random.random() > 0.8:
-                return True
-        if rank_claim_cards + rank_table_cards + last_claim.count > 5:
-            if random.random() > 0.8:
-                return True
-        if rank_claim_cards + rank_table_cards + last_claim.count > 4:
-            if random.random() > 0.3:
-                return True
+                all_prev_opponent_rank_claim_cards += 1
 
         return False
+
+    def get_cards_ranks_count_after_whatif_honest_move(self, honest_moves):
+        current_ranks_count = ranks_count(self.cards)
+
+        if len(honest_moves) == 0:
+            return current_ranks_count
+
+        cards_count_after_move = {}
+        for move in honest_moves:
+            if isinstance(move, Claim):
+                cards_count_after_move[move] = current_ranks_count - 1
+            elif isinstance(move, Take_Card):
+                cards_count_after_move[move] = current_ranks_count + 1
+
+        if len(cards_count_after_move) == 0:
+            return current_ranks_count
+
+        best_move = min(cards_count_after_move, key=cards_count_after_move.get)
+        min_cards_ranks_count = cards_count_after_move[best_move]
+        return min_cards_ranks_count
+
+    def call_cheat_was_correct(self, cards_revealed):
+        first_card = cards_revealed[0]
+        i_have_card_revealed = False
+        for card in self.cards:
+            if card.rank == first_card.rank and card.suit == first_card.suit:
+                i_have_card_revealed = True
+        return not i_have_card_revealed
+
+    def get_table_ranks_count(self, table_count):
+        table_ranks_count_my_claims = ranks_count(self._table_known_cards)
+        table_count_my_claims = len(self._table_known_cards)
+
+        # subtract my claims and add the ranks count that i really played
+        table_count_without_my_claims = table_count - table_count_my_claims + table_ranks_count_my_claims
+        return table_count_without_my_claims
 
 
 cheat = Game(Agent_70("Demo 1"), Human("me"))

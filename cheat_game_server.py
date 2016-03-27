@@ -465,8 +465,10 @@ class Human(Player):
         print "================" + "=" * len(self.name)
         last_claim = self.table.last_claim()
         print "Last Claim: {0} cards of rank {1}".format(last_claim.count, str(last_claim.rank))
-        print "Number of opponenr cards: {0:2d}".format(number_of_opponent_cards)
+        print "Number of opponent cards: {0:2d}".format(number_of_opponent_cards)
         print "Your Cards: ", ','.join([str(card) for card in self.cards])
+        print "Deck count: {0}".format(len(self.deck._cards))
+        print "Table count: {0}".format(len(self.table._cards))
         print "possible moves:"
         moves = self.possible_honest_moves()
         print "Available Moves: "

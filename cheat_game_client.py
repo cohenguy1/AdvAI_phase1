@@ -39,6 +39,14 @@ class Agent(Player):
         last_action = state['LAST_ACTION']
         cards_revealed = state['CARDS_REVEALED']
         last_claim = self.game.last_claim()
+
+        if last_claim:
+            print "Last Claim: {0} cards of rank {1}".format(last_claim.count, str(last_claim.rank))
+        print "Number of opponent cards: {0:2d}".format(opponent_count)
+        print "Your Cards: ", ','.join([str(card) for card in self.cards])
+        print "Deck count: {0}".format(len(self.deck._cards))
+        print "Table count: {0}".format(len(self.table._cards))
+
         # if opponent placed his last cards on the table - call_cheat or lose
         action = self.agent_logic(deck_count, table_count, opponent_count,
                                   last_action, last_claim, honest_moves, cards_revealed)
