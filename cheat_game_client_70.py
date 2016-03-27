@@ -253,8 +253,13 @@ class Agent_70(Agent):
             if isinstance(move, Claim):
                 scores[move] = move.count
                 available_claim = True
-            elif isinstance(move, Take_Card):
-                scores[move] = 0.6
+
+        for move in honest_moves:
+            if isinstance(move, Take_Card):
+                if available_claim:
+                    scores[move] = 0
+                else:
+                    scores[move] = 0.6
 
         if are_cards_same_rank(self.cards):
             # TODO: always cheat when table is empty!
@@ -325,14 +330,15 @@ class Agent_70(Agent):
 
                         # count the take card count and check what's the probability
                         # the opponent will get this card (with number of cards)
-                        probability_that_matching_card_pulled = opponent_taken_cards_since_same_claim / float(
+                        probability_that_matching_card_pulled = 2 * opponent_taken_cards_since_same_claim / float(
                                 deck_count + opponent_taken_cards_since_same_claim)
                         if random.random() > probability_that_matching_card_pulled + 0.1:
                             return True
                     else:
                         # opponent cheated before or cheats right now
                         # TODO: identify the cheat probability of the opponent
-                        if random.random() < self._opponent_cheat_probability:
+                        #if random.random() < self._opponent_cheat_probability:
+                        if random.random() < 0.5:
                             return True
 
         if not already_claimed_rank:
@@ -451,5 +457,6 @@ for i in range(0, 1000):
             agent_score += 1
         else:
             agent_oldver_score += 1
+#            break
         print '{0} wins: {1}'.format(agent_oldver.name, agent_oldver_score)
         print '{0} wins: {1}'.format(agent.name, agent_score)
