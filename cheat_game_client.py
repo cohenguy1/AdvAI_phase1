@@ -11,8 +11,6 @@ from cheat_game_server import Rank, Suit, Card
 class Agent(Player):
     def __init__(self, name):
         super(Agent, self).__init__(name)
-        self._cards_revealed = []
-        self._silent = False
 
     def make_claim(self, cards, claim):
         if not self._silent: print 'making claim: {0:1d} cards of rank {1}'.format(claim.count, str(claim.rank))
@@ -29,7 +27,6 @@ class Agent(Player):
         if not self._silent: print 'Calling "Cheat!"'
         super(Agent, self).call_cheat()
         state = self.game.get_state()
-        self._cards_revealed = state['CARDS_REVEALED']
 
     def make_move(self):
         if not self._silent: print

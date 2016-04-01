@@ -14,6 +14,9 @@ class Suit(IntEnum):
     CLUB = 3
     SPADE = 4
 
+    def __str__(self):
+        return list(['H ','D ','C ','S '])[int(self._value_)-1]
+
 
 class Rank(IntEnum):
     """
@@ -196,6 +199,8 @@ class Player(object):
         self.cards = []
         self.connect_to_game(game)
         self.id = id
+        #self._silent = False
+        self._silent = True
 
     def get_id(self):
         """
@@ -221,7 +226,7 @@ class Player(object):
             self.table = self.game.table
             self.deck = self.game.deck
 
-    def take_card_from_deck(self):
+    def take_card_from_deck(self, silent=False):
         """
         takes the top card from the deck\n
         :return: None
@@ -235,8 +240,9 @@ class Player(object):
         :return: cards
         """
         cards = self.table.take_cards()
-        #print 'Player {0} "{1}" received the cards from the table'.format(self.id, self.name)
-        #print '  Cards: ', ' '.join([str(card).strip() for card in cards])
+        if not self._silent: print 'Player {0} "{1}" received the cards from the table'.format(self.id, self.name)
+        if not self._silent: print '  Cards: ', ' '.join([str(card) for card in cards])
+        if not self._silent: print '         ', ' '.join([str(card.suit) for card in cards])
         self.cards.extend(cards)
         return cards
 
@@ -464,11 +470,10 @@ class Human(Player):
         print "Player {0:1d} ({1:s}) turn".format(self.id, self.name)
         print "================" + "=" * len(self.name)
         last_claim = self.table.last_claim()
-        print "Last Claim: {0} cards of rank {1}".format(last_claim.count, str(last_claim.rank))
-        print "Number of opponent cards: {0:2d}".format(number_of_opponent_cards)
+        print "Last Claim: {0} cards of rank {1}".format(last_claim.count, last_claim.rank)
+        print "Number of opponenr cards: {0:2d}".format(number_of_opponent_cards)
         print "Your Cards: ", ','.join([str(card) for card in self.cards])
-        print "Deck count: {0}".format(len(self.deck._cards))
-        print "Table count: {0}".format(len(self.table._cards))
+        print "            ", ','.join([str(card.suit) for card in self.cards])
         print "possible moves:"
         moves = self.possible_honest_moves()
         print "Available Moves: "
@@ -518,10 +523,15 @@ class Human(Player):
                     print "please enter a number between '1' and '4'"
                     continue
             claim_cards = []
+            selected_indices = []
             for index in xrange(cheat_count):
                 for i, c in enumerate(self.cards):
                     if c not in claim_cards:
-                        print "{0:d}: [{1:s}] ".format(i + 1, str(c).strip()),
+                        print "{0:d}: [{1:s}] ".format(i + 1, str(c)),
+                print
+                for i, c in enumerate(self.cards):
+                    if c not in claim_cards:
+                        print "{0:s}  [{1:s}] ".format(' '*(1+int(i>=9)), str(c.suit)),
                 print
                 selected = False
                 while not selected:
@@ -530,8 +540,11 @@ class Human(Player):
                     except ValueError:
                         print "please enter valid number of card"
                         continue
-                    if card_index > 0 and card_index <= len(self.cards):
+                    if card_index > 0 and card_index <= len(self.cards) and card_index not in selected_indices:
+                        selected_indices.append(card_index)
                         selected = True
+                    else:
+                        print "Please select a valid index"
                 claim_cards.append(self.cards[card_index - 1])
             self.make_claim(claim_cards, Claim(cheat_rank, cheat_count))
         else:
@@ -753,6 +766,7 @@ class Game:
         """
         # randomly choose first player
         self.cur_player = random.randrange(2)
+        call_cheat_timeout=0
         while not self.end_of_game():
             self.__players[self.cur_player].sort_cards()
             self.update_cheat_flag()
@@ -768,7 +782,10 @@ class Game:
                 self.last_action = ActionEnum.MAKE_CLAIM
             else:
                 self.last_action = ActionEnum.CALL_CHEAT
-            if self.last_action != ActionEnum.CALL_CHEAT:
+                call_cheat_timeout = 2
+            if call_cheat_timeout > 0:
+                call_cheat_timeout -= 1
+            else:
                 self.cards_revealed = None
             if self.table.claims:
                 self.no_new_claim = (prev_claim == self.table.last_claim())
