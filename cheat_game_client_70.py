@@ -64,6 +64,8 @@ class Agent_70(Agent):
         super(Agent_70, self).__init__(name)
         # my recent claims
         self._my_claims = []
+        # my claims history since the last time cheat was called
+        self._my_claims_history = []
         # cards that the opponents
         self._opponent_claims = []
         # opponent actions
@@ -132,6 +134,8 @@ class Agent_70(Agent):
 
         if isinstance(move, Claim) or isinstance(move, Cheat):
             self.add_to_table_known_cards(move)
+            my_claim = Claim(move.rank, move.count)
+            self._my_claims_history.append(my_claim)
 
         if deck_count == 0 and isinstance(move, Take_Card):
             move = get_call_cheat_move(honest_moves)
@@ -144,32 +148,41 @@ class Agent_70(Agent):
         self._table_known_cards = []
         self._opponent_claims = []
         self._opponent_actions = []
+        self._my_claims_history = []
 
         # in case opponent called cheat
         if last_action == ActionEnum.CALL_CHEAT:
             if isinstance(self._my_last_move, Cheat):
                 # if I had cheat and the opponent called cheat he now know the cards I get
                 for card in cards_revealed:
-                    self._my_known_cards.append(card)
+                    if card not in self._my_known_cards:
+                        self._my_known_cards.append(card)
                     if card in self._opponent_cards:
                         self._opponent_cards.remove(card)
             else:
                 # Opponent call cheat was wrong, I know the opponent cards
                 for card in cards_revealed:
-                    self._opponent_cards.append(card)
+                    if card in self._my_known_cards:
+                        self._my_known_cards.remove(card)
+                    if card not in self._opponent_cards:
+                        self._opponent_cards.append(card)
         elif isinstance(self._my_last_move, Call_Cheat):
             if len(self._my_last_move_cards) != len(self.cards):
                 # i was wrong calling cheat
                 for card in self.cards:
                     if not self.is_card_in_last_move(card):
-                        self._my_known_cards.append(card)
+                        if card not in self._my_known_cards:
+                            self._my_known_cards.append(card)
                         if card in self._opponent_cards:
                             self._opponent_cards.remove(card)
             else:
                 self._opponent_times_cheated += 1
                 # I know opponent cards
                 for card in self._cards_revealed:
-                    self._opponent_cards.append(card)
+                    if card not in self._opponent_cards:
+                        self._opponent_cards.append(card)
+                    if card in self._my_known_cards:
+                        self._my_known_cards.remove(card)
 
     def add_to_table_known_cards(self, move):
         card_count = 0
@@ -251,10 +264,15 @@ class Agent_70(Agent):
     def get_best_move(self, last_claim, honest_moves):
         scores = {}
         available_claim = False
+        top_rank = self.table.top_rank()
+        rank_above = Rank.above(top_rank)
+        rank_below = Rank.below(top_rank)
+        rank_below_history_count = 0
+        rank_above_history_count = 0
 
         for move in honest_moves:
             if isinstance(move, Claim):
-                scores[move] = move.count
+                scores[move] = move.count * (random.random() + 0.5)
                 available_claim = True
 
         for move in honest_moves:
@@ -276,9 +294,19 @@ class Agent_70(Agent):
         for move, score in scores.iteritems():
             scores[move] = score + 0.5 * (2.0 * random.random() - 1)
 
-
         # select move based on max score
         move = max(scores, key=scores.get)
+
+        # calculate how many cards I already claimed to put:
+        for h_claim in self._my_claims_history:
+            if h_claim.rank == rank_below:
+                rank_below_history_count += h_claim.count
+            if h_claim.rank == rank_above:
+                rank_above_history_count += h_claim.count
+
+        # if I claimed already 3 or more and I still have 2 or more - I would like to make a honest claim with this rank
+        # if I claimed 1 or 0 and I have in my known cards and in hand 2 or more - I would like to lie with 2 cards
+
         return move
 
 
