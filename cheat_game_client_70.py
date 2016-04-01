@@ -12,6 +12,9 @@ from cheat_game_client import Agent, DemoAgent
 # TODO add an array of cards that the opponent has and go through revealed cards to know what the opponent has/doesn't have
 # also update opponent cheat probability
 
+# TODO: if the top rank equals to cards we have and the amount of cards not equal to the rank is the same as the
+# amount of our cards same as the rank, cheat with those cards!
+
 def rank_exists(rank, cards):
     for card in cards:
         if card.rank == rank:
@@ -59,6 +62,13 @@ def ranks_count(cards):
             ranks[card.rank] = 1
 
     return len(ranks)
+
+def count_rank_in_cards(cards, rank):
+    rank_count = 0
+    for card in cards:
+        if card.rank == rank:
+            rank_count += 1
+    return rank_count
 
 
 def get_furthest_cards(cards, cheat_rank, count):
@@ -136,21 +146,24 @@ class Agent_70(Agent):
                 self._opponent_claims.append(last_claim)
                 self._opponent_actions.append(last_claim)
             elif last_action == ActionEnum.TAKE_CARD:
-                self.opponent_took_card(self.game.table.top_rank())
+                self.opponent_took_card(self.table.top_rank())
 
         if self.need_to_call_cheat(deck_count, table_count, opponent_count, last_action, last_claim, honest_moves):
             move = get_call_cheat_move(honest_moves)
         elif table_count < 2 and len(self.cards) > 1:
             move = self.empty_table_cheat()
         else:
-            move = self.get_best_move(last_claim, honest_moves)
+            if self.winning_cheat_exists():
+                move = self.get_winning_cheat()
+            else:
+                move = self.get_best_move(last_claim, honest_moves)
 
-            if isinstance(move, Cheat):
-                move = self.get_cheat(table_count)
+                if isinstance(move, Cheat):
+                    move = self.get_cheat(table_count)
 
-            # if can't cheat take a card
-            if move == 0:
-                move = get_take_card_move(honest_moves)
+                # if can't cheat take a card
+                if move == 0:
+                    move = get_take_card_move(honest_moves)
 
         if isinstance(move, Claim) or isinstance(move, Cheat):
             self.add_to_table_known_cards(move)
@@ -238,11 +251,30 @@ class Agent_70(Agent):
                 card_found = True
         return card_found
 
+    def winning_cheat_exists(self):
+        cards_of_rank_above = count_rank_in_cards(self.cards, Rank.above(self.table.top_rank()))
+        cards_of_rank_below = count_rank_in_cards(self.cards, Rank.below(self.table.top_rank()))
+        return (cards_of_rank_above == len(self.cards) - cards_of_rank_above) or (cards_of_rank_below == len(self.cards) - cards_of_rank_below)
+
+    def get_winning_cheat(self):
+        rank_above = Rank.above(self.table.top_rank())
+        rank_below = Rank.below(self.table.top_rank())
+        cards_of_rank_above = count_rank_in_cards(self.cards, rank_above)
+        cards_of_rank_below = count_rank_in_cards(self.cards, rank_below)
+        if cards_of_rank_above == len(self.cards) - cards_of_rank_above:
+            cheat_cards = get_furthest_cards(self.cards, rank_above, cards_of_rank_above)
+            return Cheat(cheat_cards, self.table.top_rank(), cards_of_rank_above)
+        else:
+            cheat_cards = get_furthest_cards(self.cards, rank_below, cards_of_rank_below)
+            return Cheat(cheat_cards, self.table.top_rank(), cards_of_rank_below)
+
+
+
     def get_cheat(self, table_count):
-        # TODO: cheat on previous claim of 2 ( 3 is large) at the start of the game
         # TODO: if the opponent knows that i have 2 or more cards, lie about them in a certain probability,
         # and tell the truth in a certain probability in the next move
         # Cheat
+
         cheat_rank = self.get_cheat_rank()
         cheat_count = 1
 
@@ -300,9 +332,11 @@ class Agent_70(Agent):
         rank_below_history_count = 0
         rank_above_history_count = 0
 
+        random_for_honest = random.random()
+
         for move in honest_moves:
             if isinstance(move, Claim):
-                scores[move] = move.count * (random.random() + 0.5)
+                scores[move] = move.count * (random_for_honest + 0.5)
                 available_claim = True
 
         for move in honest_moves:
