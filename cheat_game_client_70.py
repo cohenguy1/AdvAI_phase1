@@ -1,4 +1,6 @@
 import random
+import os
+
 from math import exp
 from collections import defaultdict
 from cheat_game_client_25 import Agent_25
@@ -39,13 +41,23 @@ def get_call_cheat_move(honest_moves):
         if isinstance(move, Call_Cheat):
             return move
 
-def get_claim(rank, honest_moves):
+
+def get_best_honest_move(honest_moves):
     max_count = 0
+    best_move = None
     for move in honest_moves:
-        if isinstance(move, Claim) and move.rank == rank and move.count > max_count:
-            my_move = move
+        if isinstance(move, Claim) and move.count > max_count:
             max_count = move.count
-    return move
+            best_move = move
+    return best_move
+
+
+def move_exists(honest_moves, move_type):
+    for move in honest_moves:
+        if isinstance(move, move_type):
+            return True
+    return False
+
 
 def get_take_card_move(honest_moves):
     for move in honest_moves:
@@ -161,25 +173,30 @@ class Agent_70(Agent):
         elif table_count < 2 and len(self.cards) > 1:
             move = self.empty_table_cheat()
         else:
-            if self.winning_cheat_exists():
-                move = self.get_winning_cheat()
+            if self.winning_cheat_exists() and table_count < 10 and random.random() < 0.5:
+                    move = self.get_winning_cheat()
             else:
                 move = self.get_best_move(last_claim, honest_moves)
 
                 if isinstance(move, Cheat):
-                    move = self.get_cheat(table_count)
+                    if move.count is None:
+                        move = self.get_cheat(table_count)
 
-                # if can't cheat take a card
-                if move == 0:
-                    move = get_take_card_move(honest_moves)
+                # if can't cheat, take a card
+                if move is None:
+                    if move_exists(honest_moves, Claim):
+                        move = get_best_honest_move(honest_moves)
+                    elif move_exists(honest_moves, Take_Card):
+                        move = get_take_card_move(honest_moves)
+                    elif move_exists(honest_moves, Call_Cheat):
+                        move = get_call_cheat_move(honest_moves)
+                    else:
+                        move = self.get_cheat(table_count, True)
 
         if isinstance(move, Claim) or isinstance(move, Cheat):
             self.add_to_table_known_cards(move)
             my_claim = Claim(move.rank, move.count)
             self._my_claims_history.append(my_claim)
-
-        if deck_count == 0 and isinstance(move, Take_Card):
-            move = get_call_cheat_move(honest_moves)
 
         if last_action == ActionEnum.MAKE_CLAIM:
             self._opponent_taken_cards_since_rank[last_claim.rank] = 0
@@ -262,7 +279,28 @@ class Agent_70(Agent):
     def winning_cheat_exists(self):
         cards_of_rank_above = count_rank_in_cards(self.cards, Rank.above(self.table.top_rank()))
         cards_of_rank_below = count_rank_in_cards(self.cards, Rank.below(self.table.top_rank()))
-        return (cards_of_rank_above == len(self.cards) - cards_of_rank_above) or (cards_of_rank_below == len(self.cards) - cards_of_rank_below)
+        winning_cheat_above = cards_of_rank_above == len(self.cards) - cards_of_rank_above
+        winning_cheat_below = cards_of_rank_below == len(self.cards) - cards_of_rank_below
+
+        if winning_cheat_above:
+            count_cheating_cards = cards_of_rank_above
+        elif winning_cheat_below:
+            count_cheating_cards = cards_of_rank_below
+        else:
+            count_cheating_cards = 0
+
+        if count_cheating_cards == 4:
+            if random.random() < 0.3:
+                return True
+            else:
+                return False
+        elif count_cheating_cards == 3:
+            if random.random() < 0.5:
+                return True
+            else:
+                return False
+
+        return winning_cheat_above or winning_cheat_below
 
     def get_winning_cheat(self):
         rank_above = Rank.above(self.table.top_rank())
@@ -271,46 +309,20 @@ class Agent_70(Agent):
         cards_of_rank_below = count_rank_in_cards(self.cards, rank_below)
         if cards_of_rank_above == len(self.cards) - cards_of_rank_above:
             cheat_cards = get_furthest_cards(self.cards, rank_above, cards_of_rank_above)
-            return Cheat(cheat_cards, self.table.top_rank(), cards_of_rank_above)
+            return Cheat(cheat_cards, rank_above, cards_of_rank_above)
         else:
             cheat_cards = get_furthest_cards(self.cards, rank_below, cards_of_rank_below)
-            return Cheat(cheat_cards, self.table.top_rank(), cards_of_rank_below)
+            return Cheat(cheat_cards, rank_below, cards_of_rank_below)
 
 
 
-    def get_cheat(self, table_count):
+    def get_cheat(self, table_count, force_cheat = False):
         # TODO: if the opponent knows that i have 2 or more cards, lie about them in a certain probability,
         # and tell the truth in a certain probability in the next move
         # Cheat
 
         cheat_rank = self.get_cheat_rank()
         cheat_count = 1
-
-        rank_above_table_cards = 0
-
-        # for card in self._opponent_claims:
-        #     if card.rank == rank_above:
-        #         rank_above_table_cards += 1
-        # for card in self._opponent_cards:
-        #    if card.rank == rank_above:
-        #        rank_above_table_cards += 1
-
-        rank_below_table_cards = 0
-
-        # for card in self._opponent_claims:
-        #     if card.rank == rank_above:
-        #         rank_below_table_cards += 1
-        # for card in self._opponent_cards:
-        #    if card.rank == rank_above:
-        #        rank_below_table_cards += 1
-
-        # if (rank_below_table_cards > 2 and rank_above_table_cards < 3) or rank_below_table_cards == 4:
-        #    cheat_rank = rank_above
-        # elif (rank_above_table_cards > 2 and rank_below_table_cards < 3) or rank_above_table_cards == 4:
-        #    cheat_rank = rank_below
-
-        if rank_below_table_cards == 4 and rank_above_table_cards == 4:
-            return 0
 
         # decaying function of number of cards on the table - cheat less when risk is large
         r = 0.5 * exp(-0.1 * table_count)
@@ -340,19 +352,17 @@ class Agent_70(Agent):
         rank_below_history_count = 0
         rank_above_history_count = 0
 
-        random_for_honest = random.random()
+        if move_exists(honest_moves, Claim):
+            best_honest_move = get_best_honest_move(honest_moves)
+            scores[best_honest_move] = best_honest_move.count + 0.5
+            available_claim = True
 
-        for move in honest_moves:
-            if isinstance(move, Claim):
-                scores[move] = move.count * (random_for_honest + 0.5)
-                available_claim = True
-
-        for move in honest_moves:
-            if isinstance(move, Take_Card):
-                if available_claim:
-                    scores[move] = -1
-                else:
-                    scores[move] = 0.6
+        if move_exists(honest_moves, Take_Card):
+            take_card_move = get_take_card_move(honest_moves)
+            if available_claim:
+                scores[take_card_move] = -1
+            else:
+                scores[take_card_move] = 0.6
 
         if are_cards_same_rank(self.cards):
             scores[Cheat()] = -1
@@ -362,23 +372,25 @@ class Agent_70(Agent):
             else:
                 scores[Cheat()] = self.cheat_prob["NO_MOVES"]
 
-        random_cheat = random.random()
-        random_take_card = random.random()
-        random_honest = random.random()
-
-        # randomize scores add random \in [-0.5..0.5)
+        # randomize scores add random in [-0.5..0.5)
         for move, score in scores.iteritems():
-            if isinstance(move, Take_Card):
-                random_to_add = random_take_card
-            elif isinstance(move, Claim):
-                random_to_add = random_honest
-            elif isinstance(move, Cheat):
-                random_to_add = random_cheat
-
-            scores[move] = score + 0.5 * (2.0 * random_to_add - 1)
+            scores[move] = score + 0.5 * (2.0 * random.random() - 1)
 
         # select move based on max score
         move = max(scores, key=scores.get)
+
+        # at 80% don't lie if you have 4 same cards
+        if isinstance(move, Claim):
+            if move.count == 4 and random.random() < 0.8:
+                return move
+            elif move.count == 1:
+                return move
+
+        if are_cards_same_rank(self.cards):
+            if move_exists(honest_moves, Claim):
+                return get_best_honest_move(honest_moves)
+            else:
+                return get_take_card_move(honest_moves)
 
         # calculate how many cards I already claimed to put:
         for h_claim in self._my_claims_history:
@@ -398,18 +410,32 @@ class Agent_70(Agent):
 
         # choose cheat rank based on distance to remaining agent's card
         for card in self._my_known_cards:
-            known_rank_above_score += card.rank.dist(rank_above)
-            known_rank_below_score += card.rank.dist(rank_below)
+            if card.rank == rank_above:
+                known_rank_above_score += 1
+            elif card.rank == rank_below:
+                known_rank_below_score += 1
 
         # if I claimed already 3 or more and I still have 2 or more - I would like to make a honest claim with this rank
         if rank_above_history_count > 2 and rank_above_score > 1:
-            move = get_claim(rank_above, honest_moves)
+            move = get_best_honest_move(honest_moves)
         elif rank_above_history_count <= 2 and known_rank_above_score > 2:
-            move = self.known_cards_cheat(rank_above, known_rank_above_score - rank_above_history_count)
+            #if random.random() < 0.3:
+                rank_count = count_rank_in_cards(self.cards, rank_above)
+                cheat_count = max(known_rank_above_score - rank_above_history_count, rank_count)
+                cheat_count = min(cheat_count, len(self.cards) - 1)
+                move = self.known_cards_cheat(rank_above, cheat_count)
+            #else:
+            #    move = get_best_honest_move(honest_moves)
         elif rank_below_history_count > 2 and rank_below_score > 1:
-            move = get_claim(rank_above, honest_moves)
+            move = get_best_honest_move(honest_moves)
         elif rank_below_history_count <= 2 and known_rank_below_score > 2:
-            move = self.known_cards_cheat(rank_below, known_rank_below_score - rank_below_history_count)
+            #if random.random() < 0.3:
+            rank_count = count_rank_in_cards(self.cards, rank_below)
+            cheat_count = max(known_rank_below_score - rank_below_history_count, rank_count)
+            cheat_count = min(cheat_count, len(self.cards) - 1)
+            move = self.known_cards_cheat(rank_below, cheat_count)
+            #else:
+            #    move = get_best_honest_move(honest_moves)
 
         # if I claimed 1 or 0 and I have in my known cards and in hand 2 or more - I would like to lie with 2 cards
 
@@ -463,7 +489,7 @@ class Agent_70(Agent):
                         ranks_not_mine = 4 - rank_known_cards
                         probability_that_matching_card_pulled = opponent_taken_cards_since_same_claim * ranks_not_mine / float(
                                 deck_count + opponent_taken_cards_since_same_claim)
-                        if random.random() > probability_that_matching_card_pulled + 0.1:
+                        if random.random() > probability_that_matching_card_pulled + 0.25:
                             return True
                     else:
                         # opponent cheated before or cheats right now
@@ -505,11 +531,19 @@ class Agent_70(Agent):
             # decaying function of number of cards on the table - call cheat less when risk is large
             cards_count_after_whatif_honest_play = self.get_cards_ranks_count_after_whatif_honest_move(honest_moves)
             table_ranks_count = self.get_table_ranks_count(table_count)
-            decaying_function_param = table_ranks_count - cards_count_after_whatif_honest_play + opponent_count + self._opponent_times_cheated
+            decaying_function_param = table_ranks_count - (cards_count_after_whatif_honest_play / 2) + opponent_count + self._opponent_times_cheated
             call_cheat = 0.33 * exp(-0.1 * decaying_function_param)
 
             if random.random() < call_cheat:
                 return True
+
+            if deck_count > 30 and opponent_count <= 10:
+                if last_claim.count == 3:
+                    if random.random() < 0.7:
+                        return True
+                elif last_claim.count == 2:
+                    if random.random() < 0.2:
+                        return True
 
         all_prev_opponent_rank_claim_cards = 0
         for card in self._opponent_claims:
@@ -592,8 +626,18 @@ class Agent_70(Agent):
     def empty_table_cheat(self):
         cheat_rank = self.get_cheat_rank()
 
+        # Guess the cheat rank in a smart way
+        if not rank_exists(cheat_rank, self.cards):
+            if rank_exists(Rank.above(cheat_rank), self.cards):
+                cheat_rank = Rank.above(cheat_rank)
+            elif rank_exists(Rank.below(cheat_rank), self.cards):
+                cheat_rank = Rank.below(cheat_rank)
+
         # in the worst case, be with one card left
         cheat_count = min(3, len(self.cards) - 1)
+
+        # in case we really have 4 cards
+        cheat_count = max(cheat_count, count_rank_in_cards(self.cards, cheat_rank))
 
         # select cards furthest from current claim rank
         claim_cards = get_furthest_cards(self.cards, cheat_rank, cheat_count)
@@ -621,18 +665,22 @@ class Agent_70(Agent):
 agent_score = 0
 agent_oldver_score = 0
 for i in range(0, 1000):
-    # agent_oldver = DemoAgent("Demo Agent Old Ver.")
-    agent_oldver = Agent_25("agent 25")
+
+    os.system('cls')
+    agent_oldver = DemoAgent("Demo Agent Old Ver.")
+    #agent_oldver = Agent_25("agent 25")
     agent_oldver.set_id(1)
     agent = Agent_70("Agent 70")
     agent.set_id(2)
     cheat = Game(agent_oldver, agent)
     cheat.play()
+
     if cheat.end_of_game():
         if cheat.winner == agent:
             agent_score += 1
         else:
             agent_oldver_score += 1
-        # break
+#            break
+
         print '{0} wins: {1}'.format(agent_oldver.name, agent_oldver_score)
         print '{0} wins: {1}'.format(agent.name, agent_score)
