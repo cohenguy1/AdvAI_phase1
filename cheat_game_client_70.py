@@ -1,6 +1,7 @@
 import random
 from math import exp
 from collections import defaultdict
+from cheat_game_client_25 import Agent_25
 
 from cheat_game_server import Game
 from cheat_game_server import Player, Human
@@ -38,6 +39,13 @@ def get_call_cheat_move(honest_moves):
         if isinstance(move, Call_Cheat):
             return move
 
+def get_claim(rank, honest_moves):
+    max_count = 0
+    for move in honest_moves:
+        if isinstance(move, Claim) and move.rank == rank and move.count > max_count:
+            my_move = move
+            max_count = move.count
+    return move
 
 def get_take_card_move(honest_moves):
     for move in honest_moves:
@@ -379,7 +387,30 @@ class Agent_70(Agent):
             if h_claim.rank == rank_above:
                 rank_above_history_count += h_claim.count
 
+        rank_above_score = rank_below_score = 0
+
+        # choose cheat rank based on distance to remaining agent's card
+        for card in self.cards:
+            rank_above_score += card.rank.dist(rank_above)
+            rank_below_score += card.rank.dist(rank_below)
+
+        known_rank_above_score = known_rank_below_score = 0
+
+        # choose cheat rank based on distance to remaining agent's card
+        for card in self._my_known_cards:
+            known_rank_above_score += card.rank.dist(rank_above)
+            known_rank_below_score += card.rank.dist(rank_below)
+
         # if I claimed already 3 or more and I still have 2 or more - I would like to make a honest claim with this rank
+        if rank_above_history_count > 2 and rank_above_score > 1:
+            move = get_claim(rank_above, honest_moves)
+        elif rank_above_history_count <= 2 and known_rank_above_score > 2:
+            move = self.known_cards_cheat(rank_above, known_rank_above_score - rank_above_history_count)
+        elif rank_below_history_count > 2 and rank_below_score > 1:
+            move = get_claim(rank_above, honest_moves)
+        elif rank_below_history_count <= 2 and known_rank_below_score > 2:
+            move = self.known_cards_cheat(rank_below, known_rank_below_score - rank_below_history_count)
+
         # if I claimed 1 or 0 and I have in my known cards and in hand 2 or more - I would like to lie with 2 cards
 
         return move
@@ -568,6 +599,11 @@ class Agent_70(Agent):
         claim_cards = get_furthest_cards(self.cards, cheat_rank, cheat_count)
         return Cheat(claim_cards, cheat_rank, cheat_count)
 
+    def known_cards_cheat(self, cheat_rank, cheat_count):
+        # select cards furthest from current claim rank
+        claim_cards = get_furthest_cards(self.cards, cheat_rank, cheat_count)
+        return Cheat(claim_cards, cheat_rank, cheat_count)
+
     def opponent_took_card(self, table_top_rank):
         self._opponent_actions.append(Take_Card())
         self._opponent_card_probability[Rank.above(table_top_rank)] = 0.1
@@ -585,7 +621,8 @@ class Agent_70(Agent):
 agent_score = 0
 agent_oldver_score = 0
 for i in range(0, 1000):
-    agent_oldver = DemoAgent("Demo Agent Old Ver.")
+    # agent_oldver = DemoAgent("Demo Agent Old Ver.")
+    agent_oldver = Agent_25("agent 25")
     agent_oldver.set_id(1)
     agent = Agent_70("Agent 70")
     agent.set_id(2)
